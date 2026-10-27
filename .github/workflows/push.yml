@@ -1,6 +1,6 @@
 name: Push preview
 
-# Reusable workflow: pushes a GitHub Pages artifact to https://<pr>-<repo>-<org>.website-preview.chtc.io/
+# Reusable workflow: pushes a GitHub Pages artifact to https://<pr>-<repo>-<org>.<domain>/
 # Call it from a `pull_request` workflow, after a job that ran actions/upload-pages-artifact.
 
 on:
@@ -10,6 +10,10 @@ on:
         description: Name of the artifact uploaded by actions/upload-pages-artifact
         type: string
         default: github-pages
+      domain:
+        description: The server's PREVIEW_DOMAIN; pushes go to push.<domain>
+        type: string
+        default: website-preview.chtc.chtc.io
 
 jobs:
   push:
@@ -34,9 +38,10 @@ jobs:
 
       - name: Push
         env:
-          PUSH_HOST: push.website-preview.chtc.io
+          DOMAIN: ${{ inputs.domain }}
         run: |
           set -euo pipefail
+          PUSH_HOST="push.$DOMAIN"
 
           # 1. OIDC token, audience = push host. It goes on every request.
           OIDC=$(curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
@@ -82,4 +87,4 @@ jobs:
           # 5. Multiplexed upload
           curl -sS --parallel --parallel-max 16 --config "$RUNNER_TEMP/uploads.cfg"
           rm -f "$RUNNER_TEMP/uploads.cfg"
-          echo "Pushed to https://$LABEL.website-preview.chtc.io/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pushed to https://$LABEL.$DOMAIN/" >> "$GITHUB_STEP_SUMMARY"

@@ -45,11 +45,11 @@ printf '%s' "$repo-$org" | tr 'A-Z./' 'a-z--'
 | Variable | Value |
 | --- | --- |
 | `OIDC_ISSUER` | `https://token.actions.githubusercontent.com` |
-| `OIDC_AUDIENCE` | `push.website-preview.chtc.io` |
+| `PREVIEW_DOMAIN` | `website-preview.chtc.io`. Sites are served at `<label>.$PREVIEW_DOMAIN` and pushes go to `push.$PREVIEW_DOMAIN`, which is also the required OIDC audience. Callers of `push.yml` pass the same value as its `domain` input. |
 | `PUSH_WORKFLOW_REF` | `CHTC/website-preview/.github/workflows/push.yml@refs/heads/main` |
 | `PRUNE_PERCENT` | Optional, default `90`. The share of the sites volume the site builds may use before the oldest are deleted. |
 
-The first three are required; if any is missing, every push fails with a 500 and the reason in the error log.
+The first three are required. Without `PREVIEW_DOMAIN` the container doesn't start; without either of the others, every push fails with a 500 and the reason in the error log.
 
 ## Files
 
@@ -60,7 +60,7 @@ The first three are required; if any is missing, every push fails with a 500 and
 | [`njs/auth.js`](../njs/auth.js) | Verifies the OIDC token, runs `authorize()`, and checks the request path against the label. |
 | [`njs/prune.js`](../njs/prune.js) | Hourly pruning, run by `js_periodic`. |
 | [`sites.json`](../sites.json) | Allowed repos: `"<repository_id>:<repository_owner_id>": "<repo>-<org>"`. Changing it needs an image rebuild. |
-| [`docker-entrypoint.d/05-setup.sh`](../docker-entrypoint.d/05-setup.sh) | Writes the nginx resolver from `/etc/resolv.conf`, creates `/srv/sites/.tmp`, and records the volume size for `prune.js`. |
+| [`docker-entrypoint.d/05-setup.sh`](../docker-entrypoint.d/05-setup.sh) | Writes the nginx resolver from `/etc/resolv.conf` and the `server_name` lines from `PREVIEW_DOMAIN`, creates `/srv/sites/.tmp`, and records the volume size for `prune.js`. |
 | [`.github/workflows/push.yml`](../.github/workflows/push.yml) | The reusable push workflow. |
 
 See the [README](../README.md) for deploying on Kubernetes and adding a site.
@@ -101,7 +101,7 @@ All checks run on the verified token's claims.
 | Claim | Required value |
 | --- | --- |
 | Signature | RS256, against the JWKS at `$OIDC_ISSUER/.well-known/jwks` |
-| `iss`, `aud` | `$OIDC_ISSUER`, `$OIDC_AUDIENCE` |
+| `iss`, `aud` | `$OIDC_ISSUER`, `push.$PREVIEW_DOMAIN` |
 | `exp` | Not expired |
 | `repository_id` + `repository_owner_id` | A key in `sites.json` |
 | `job_workflow_ref` | Exactly `$PUSH_WORKFLOW_REF` |
@@ -117,7 +117,7 @@ docker build -t website-preview .
 mkdir -p /tmp/wp-sites && chmod 777 /tmp/wp-sites
 docker run -d --name wp-test -p 8080:8080 --read-only --tmpfs /tmp \
   -e OIDC_ISSUER=https://token.actions.githubusercontent.com \
-  -e OIDC_AUDIENCE=push.website-preview.chtc.io \
+  -e PREVIEW_DOMAIN=website-preview.chtc.io \
   -e PUSH_WORKFLOW_REF=CHTC/website-preview/.github/workflows/push.yml@refs/heads/main \
   -v /tmp/wp-sites:/srv/sites website-preview
 

@@ -1,7 +1,8 @@
 import fs from 'fs';
 
 const ISS = process.env.OIDC_ISSUER;
-const AUD = process.env.OIDC_AUDIENCE;
+// The push workflow asks for a token whose audience is the push host
+const AUD = process.env.PREVIEW_DOMAIN && 'push.' + process.env.PREVIEW_DOMAIN;
 const WORKFLOW = process.env.PUSH_WORKFLOW_REF;
 const CACHE_MS = 10 * 60 * 1000;                 // max life of a cached verification
 const PR_REF = /^refs\/pull\/(\d+)\/merge$/;
@@ -75,7 +76,7 @@ function pathOk(raw, label, method) {
 
 async function verify(r) {
   try {
-    if (!ISS || !AUD || !WORKFLOW) throw new Error('OIDC_ISSUER, OIDC_AUDIENCE and PUSH_WORKFLOW_REF must be set');
+    if (!ISS || !AUD || !WORKFLOW) throw new Error('OIDC_ISSUER, PREVIEW_DOMAIN and PUSH_WORKFLOW_REF must be set');
     const tok = bearer(r);
     if (!tok) return r.return(401);
     const key = await sha256hex(tok);

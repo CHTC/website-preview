@@ -16,11 +16,11 @@ Traefik terminates TLS and forwards plain HTTP to the pod on port 8080. The pod 
 | Variable | Required | Value |
 | --- | --- | --- |
 | `OIDC_ISSUER` | yes | `https://token.actions.githubusercontent.com` |
-| `OIDC_AUDIENCE` | yes | `push.website-preview.chtc.io` |
+| `PREVIEW_DOMAIN` | yes | `website-preview.chtc.io`. Sites are served at `<label>.<domain>`, pushes go to `push.<domain>`, and that push host is the OIDC audience. Site repos pass the same value as the workflow's `domain` input. |
 | `PUSH_WORKFLOW_REF` | yes | `CHTC/website-preview/.github/workflows/push.yml@refs/heads/main` |
 | `PRUNE_PERCENT` | no | Share of the sites volume the builds may use before the oldest are deleted. Default `90`. |
 
-If any required variable is missing, every push fails with a 500 and `verify error: ...` in the pod log.
+If `PREVIEW_DOMAIN` is missing or isn't a lowercase host name, the container exits at startup. If either other required variable is missing, every push fails with a 500 and `verify error: ...` in the pod log.
 
 ### DNS
 
@@ -70,7 +70,7 @@ spec:
             - { name: http, containerPort: 8080 }
           env:
             - { name: OIDC_ISSUER, value: https://token.actions.githubusercontent.com }
-            - { name: OIDC_AUDIENCE, value: push.website-preview.chtc.io }
+            - { name: PREVIEW_DOMAIN, value: website-preview.chtc.io }
             - { name: PUSH_WORKFLOW_REF, value: CHTC/website-preview/.github/workflows/push.yml@refs/heads/main }
           securityContext:
             readOnlyRootFilesystem: true
@@ -150,6 +150,7 @@ jobs:
     needs: build
     permissions: { id-token: write, contents: read }
     uses: CHTC/website-preview/.github/workflows/push.yml@main
+    # with: { domain: website-preview.chtc.chtc.io }   # the server's PREVIEW_DOMAIN; this is the default
 ```
 
-The preview appears at `https://<pr>-<repo>-<org>.website-preview.chtc.io/`, and the link is added to the job summary. PRs from forks get no OIDC token, so they can't push previews.
+The preview appears at `https://<pr>-<repo>-<org>.<domain>/`, and the link is added to the job summary. PRs from forks get no OIDC token, so they can't push previews.
