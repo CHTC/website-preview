@@ -2,13 +2,13 @@
 
 A single nginx container that hosts static PR preview builds and accepts WebDAV pushes from one reusable GitHub workflow. All authorization is done inside nginx by an njs script that verifies the workflow's GitHub OIDC token.
 
-- Push URL: `https://push.website-preview.chtc.io`
-- Site URLs: `https://<label>.website-preview.chtc.io`, where `<label>` is `<pr>-<repo>-<org>`
+- Push URL: `https://push.website-preview.chtc.chtc.io`
+- Site URLs: `https://<label>.website-preview.chtc.chtc.io`, where `<label>` is `<pr>-<repo>-<org>`
 - Date written: 2026-10-27
 
 ## How it works
 
-1. The push job, triggered by a push to a branch with an open PR, asks GitHub for an OIDC token with audience `push.website-preview.chtc.io`.
+1. The push job, triggered by a push to a branch with an open PR, asks GitHub for an OIDC token with audience `push.website-preview.chtc.chtc.io`.
 2. The job sends that token on every request (`Authorization: Bearer ...`).
 3. For each `PUT`/`DELETE`, nginx runs `auth_request` against an internal njs handler (`auth.verify`).
 4. The handler looks up `sha256(token)` in a shared-memory cache.
@@ -23,10 +23,10 @@ The server derives the directory from the token's `repository_id` and `ref`, nev
 One wildcard record covers everything, including the push host:
 
 ```
-*.website-preview.chtc.io.   300 IN A   <Traefik host IP>
+*.website-preview.chtc.chtc.io.   300 IN A   <Traefik host IP>
 ```
 
-- Traefik terminates TLS with a `*.website-preview.chtc.io` certificate (Let's Encrypt needs DNS-01 for wildcards) and forwards plain HTTP to the container on port 8080, keeping the original `Host` header.
+- Traefik terminates TLS with a `*.website-preview.chtc.chtc.io` certificate (Let's Encrypt needs DNS-01 for wildcards) and forwards plain HTTP to the container on port 8080, keeping the original `Host` header.
 - The push host also matches the read host's pattern; nginx picks the exact name. Never create a site whose label is exactly `push`.
 - Labels must not contain dots, because a wildcard matches one DNS label only.
 
@@ -45,7 +45,7 @@ printf '%s' "$repo-$org" | tr 'A-Z./' 'a-z--'
 | Variable | Value |
 | --- | --- |
 | `OIDC_ISSUER` | `https://token.actions.githubusercontent.com` |
-| `PREVIEW_DOMAIN` | `website-preview.chtc.io`. Sites are served at `<label>.$PREVIEW_DOMAIN` and pushes go to `push.$PREVIEW_DOMAIN`, which is also the required OIDC audience. Callers of `push.yml` pass the same value as its `domain` input. |
+| `PREVIEW_DOMAIN` | `website-preview.chtc.chtc.io`. Sites are served at `<label>.$PREVIEW_DOMAIN` and pushes go to `push.$PREVIEW_DOMAIN`, which is also the required OIDC audience. Callers of `push.yml` pass the same value as its `domain` input. |
 | `PUSH_WORKFLOW_REF` | `CHTC/website-preview/.github/workflows/push.yml@refs/heads/main` |
 | `PRUNE_PERCENT` | Optional, default `90`. The share of the sites volume the site builds may use before the oldest are deleted. |
 
@@ -90,7 +90,7 @@ jobs:
 
   preview:
     needs: build
-    permissions: { id-token: write, contents: read }
+    permissions: { id-token: write, contents: read, pull-requests: write }
     uses: CHTC/website-preview/.github/workflows/push.yml@main
 ```
 
@@ -117,15 +117,15 @@ docker build -t website-preview .
 mkdir -p /tmp/wp-sites && chmod 777 /tmp/wp-sites
 docker run -d --name wp-test -p 8080:8080 --read-only --tmpfs /tmp \
   -e OIDC_ISSUER=https://token.actions.githubusercontent.com \
-  -e PREVIEW_DOMAIN=website-preview.chtc.io \
+  -e PREVIEW_DOMAIN=website-preview.chtc.chtc.io \
   -e PUSH_WORKFLOW_REF=CHTC/website-preview/.github/workflows/push.yml@refs/heads/main \
   -v /tmp/wp-sites:/srv/sites website-preview
 
-P="--resolve push.website-preview.chtc.io:8080:127.0.0.1 --resolve 1-x.website-preview.chtc.io:8080:127.0.0.1"
-curl -s -o /dev/null -w '%{http_code}\n' $P http://push.website-preview.chtc.io:8080/                   # 401
-curl -s -o /dev/null -w '%{http_code}\n' $P -X PUT --data x -H 'Authorization: Bearer bogus' http://push.website-preview.chtc.io:8080/1-x/a.txt   # 401
-curl -s -o /dev/null -w '%{http_code}\n' $P -X PUT --data x http://1-x.website-preview.chtc.io:8080/a.txt    # 405
-curl -s -o /dev/null -w '%{http_code}\n' $P http://1-x.website-preview.chtc.io:8080/a.txt                    # 404
+P="--resolve push.website-preview.chtc.chtc.io:8080:127.0.0.1 --resolve 1-x.website-preview.chtc.chtc.io:8080:127.0.0.1"
+curl -s -o /dev/null -w '%{http_code}\n' $P http://push.website-preview.chtc.chtc.io:8080/                   # 401
+curl -s -o /dev/null -w '%{http_code}\n' $P -X PUT --data x -H 'Authorization: Bearer bogus' http://push.website-preview.chtc.chtc.io:8080/1-x/a.txt   # 401
+curl -s -o /dev/null -w '%{http_code}\n' $P -X PUT --data x http://1-x.website-preview.chtc.chtc.io:8080/a.txt    # 405
+curl -s -o /dev/null -w '%{http_code}\n' $P http://1-x.website-preview.chtc.chtc.io:8080/a.txt                    # 404
 curl -s http://127.0.0.1:8080/ ; echo "curl exit $?"                                                         # 52
 docker rm -f wp-test
 ```

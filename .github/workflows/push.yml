@@ -24,6 +24,7 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      pull-requests: write                             # for the preview link comment
     steps:
       - name: Download Pages artifact
         uses: actions/download-artifact@v4
@@ -37,6 +38,7 @@ jobs:
           tar -xf "$RUNNER_TEMP/pages/artifact.tar" -C site
 
       - name: Push
+        id: push
         env:
           DOMAIN: ${{ inputs.domain }}
         run: |
@@ -88,3 +90,23 @@ jobs:
           curl -sS --parallel --parallel-max 16 --config "$RUNNER_TEMP/uploads.cfg"
           rm -f "$RUNNER_TEMP/uploads.cfg"
           echo "Pushed to https://$LABEL.$DOMAIN/" >> "$GITHUB_STEP_SUMMARY"
+          echo "url=https://$LABEL.$DOMAIN/" >> "$GITHUB_OUTPUT"
+
+      - name: Comment preview link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          URL: ${{ steps.push.outputs.url }}
+        run: |
+          set -euo pipefail
+          API="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/issues/$PR/comments"
+          MARKER='<!-- website-preview -->'
+          auth=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json")
+
+          # The URL is the same for every push to a PR, so comment once
+          if curl -fsS "${auth[@]}" "$API?per_page=100" \
+               | jq -e --arg m "$MARKER" 'any(.[]; .body | startswith($m))' > /dev/null; then
+            exit 0
+          fi
+          jq -n --arg body "$MARKER"$'\n'"Preview: $URL" '{body: $body}' \
+            | curl -fsS "${auth[@]}" -X POST --data @- "$API" > /dev/null
