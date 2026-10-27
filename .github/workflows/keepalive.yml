@@ -1,0 +1,29 @@
+name: Keepalive
+
+# GitHub disables scheduled workflows after 60 days without repository activity.
+# This re-enables them through the API each month.
+
+on:
+  schedule:
+    - cron: '0 0 1 * *' # monthly, well inside the 60 days
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for wf in push-container.yml keepalive.yml; do
+            curl -fsS -X PUT \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/$wf/enable"
+            echo "enabled $wf"
+          done

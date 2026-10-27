@@ -1,0 +1,85 @@
+name: Push preview
+
+# Reusable workflow: pushes a GitHub Pages artifact to https://<pr>-<repo>-<org>.website-preview.chtc.io/
+# Call it from a `pull_request` workflow, after a job that ran actions/upload-pages-artifact.
+
+on:
+  workflow_call:
+    inputs:
+      artifact-name:
+        description: Name of the artifact uploaded by actions/upload-pages-artifact
+        type: string
+        default: github-pages
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    concurrency:                                       # one push per PR at a time; a newer commit wins
+      group: website-preview-${{ github.repository }}-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Download Pages artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/pages
+
+      - name: Extract
+        run: |
+          mkdir site
+          tar -xf "$RUNNER_TEMP/pages/artifact.tar" -C site
+
+      - name: Push
+        env:
+          PUSH_HOST: push.website-preview.chtc.io
+        run: |
+          set -euo pipefail
+
+          # 1. OIDC token, audience = push host. It goes on every request.
+          OIDC=$(curl -sS --fail -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+                 "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$PUSH_HOST" | jq -r .value)
+          echo "::add-mask::$OIDC"
+
+          # 2. Directory label: <pr>-<repo>-<org>, lowercase, dots and slashes -> hyphens
+          repo=${GITHUB_REPOSITORY#*/}; org=${GITHUB_REPOSITORY%%/*}
+          PR=${GITHUB_REF_NAME%%/*}                      # refs/pull/<n>/merge
+          LABEL="$PR-$(printf '%s' "$repo-$org" | tr 'A-Z./' 'a-z--')"
+          export OIDC PUSH_HOST LABEL
+
+          # 3. Wipe the old site (404 on the first push is fine)
+          status=$(curl -sS --retry 3 -o /dev/null -w '%{http_code}' -X DELETE \
+                   -H "Authorization: Bearer $OIDC" "https://$PUSH_HOST/$LABEL/")
+          case "$status" in
+            2??|404) ;;
+            *) echo "::error::Deleting the old preview returned HTTP $status"; exit 1 ;;
+          esac
+
+          # 4. One curl config block per file
+          python3 - <<'PY' > "$RUNNER_TEMP/uploads.cfg"
+          import os, sys, urllib.parse as u
+          q = lambda s: s.replace('\\', '\\\\').replace('"', '\\"')
+          base = f"https://{os.environ['PUSH_HOST']}/{os.environ['LABEL']}/"
+          first = True
+          for root, _, files in os.walk('site'):
+              for f in files:
+                  p = os.path.join(root, f)
+                  if os.path.islink(p) or not os.path.isfile(p):
+                      sys.exit(f'refusing non-regular file: {p}')
+                  rel = os.path.relpath(p, 'site').replace(os.sep, '/')
+                  if not first: print('next')
+                  first = False
+                  print(f'upload-file = "{q(p)}"')
+                  print(f'url = "{q(base + u.quote(rel))}"')
+                  print(f'header = "Authorization: Bearer {os.environ["OIDC"]}"')
+                  print('fail-with-body')
+                  print('retry = 3')
+          PY
+          chmod 600 "$RUNNER_TEMP/uploads.cfg"
+
+          # 5. Multiplexed upload
+          curl -sS --parallel --parallel-max 16 --config "$RUNNER_TEMP/uploads.cfg"
+          rm -f "$RUNNER_TEMP/uploads.cfg"
+          echo "Pushed to https://$LABEL.website-preview.chtc.io/" >> "$GITHUB_STEP_SUMMARY"

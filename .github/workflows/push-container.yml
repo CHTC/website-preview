@@ -1,0 +1,22 @@
+name: Build image
+
+on:
+  push:
+    branches: ["main"]
+    tags:
+      - 'v*.*.*' # glob for semver tags (including prereleases)
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0' # Sundays at midnight UTC
+
+
+jobs:
+  call-build-image:
+    uses: osg-htc/build-push/.github/workflows/build-push.yaml@34bb494bf3c926aafcd210c4eecb1e6088fc65f2
+    secrets:
+      password: ${{ secrets.OSG_HARBOR_ROBOT_PASSWORD }}
+      username: ${{ secrets.OSG_HARBOR_ROBOT_USER }}
+    with:
+      image: 'hub.opensciencegrid.org/chtc/website-preview'
